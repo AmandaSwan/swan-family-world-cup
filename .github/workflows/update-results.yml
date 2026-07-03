@@ -1,0 +1,126 @@
+name: Update World Cup Results
+
+on:
+  schedule:
+    # Run every 2 hours during match days
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-results:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch World Cup Results
+        run: |
+          # Fetch from football-data.org free API (no auth needed for basic data)
+          # FIFA World Cup 2026 competition ID: 2000 (placeholder - update when available)
+          
+          cat > fetch_results.py << 'EOF'
+          import json
+          import urllib.request
+          import urllib.error
+          from datetime import datetime
+
+          # Load current results
+          with open('data/results.json', 'r') as f:
+              current = json.load(f)
+
+          # Try football-data.org free tier
+          COMPETITION_ID = "2000"  # FIFA World Cup
+          API_URL = f"https://api.football-data.org/v4/competitions/{COMPETITION_ID}/matches?status=FINISHED"
+
+          headers = {
+              'X-Auth-Token': '${{ secrets.FOOTBALL_DATA_API_KEY }}'
+          }
+
+          # Map of round names from API to our format
+          ROUND_MAP = {
+              'ROUND_OF_16': 'r16',
+              'QUARTER_FINALS': 'qf',
+              'SEMI_FINALS': 'sf',
+              'FINAL': 'final'
+          }
+
+          try:
+              req = urllib.request.Request(API_URL, headers=headers)
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  data = json.loads(resp.read())
+
+              matches = {}
+              final_goal_diff = None
+              match_counters = {'r16': 0, 'qf': 0, 'sf': 0, 'final': 0}
+
+              for match in data.get('matches', []):
+                  stage = match.get('stage', '')
+                  round_key = ROUND_MAP.get(stage)
+                  if not round_key:
+                      continue
+
+                  score = match.get('score', {})
+                  full_time = score.get('fullTime', {})
+                  winner_code = score.get('winner')
+
+                  if winner_code and full_time.get('home') is not None:
+                      match_counters[round_key] += 1
+                      match_id = f"{round_key}_{match_counters[round_key]}"
+
+                      home_team = match['homeTeam']['name']
+                      away_team = match['awayTeam']['name']
+
+                      if winner_code == 'HOME_TEAM':
+                          matches[match_id] = home_team
+                      elif winner_code == 'AWAY_TEAM':
+                          matches[match_id] = away_team
+                      else:
+                          # Draw in knockout = check penalties
+                          penalties = score.get('penalties', {})
+                          if penalties.get('home', 0) > penalties.get('away', 0):
+                              matches[match_id] = home_team
+                          else:
+                              matches[match_id] = away_team
+
+                      # Goal diff for final
+                      if round_key == 'final':
+                          home_goals = full_time['home']
+                          away_goals = full_time['away']
+                          final_goal_diff = abs(home_goals - away_goals)
+                          # If it went to extra time/penalties, use regulation score diff
+                          regular = score.get('regularTime', full_time)
+                          if regular.get('home') is not None:
+                              final_goal_diff = abs(regular['home'] - regular['away'])
+
+              result = {
+                  'lastUpdated': datetime.utcnow().isoformat() + 'Z',
+                  'matches': matches,
+                  'finalGoalDiff': final_goal_diff,
+                  'source': 'football-data.org'
+              }
+
+              with open('data/results.json', 'w') as f:
+                  json.dump(result, f, indent=2)
+
+              print(f"✅ Updated {len(matches)} match results")
+
+          except urllib.error.HTTPError as e:
+              print(f"⚠️ API error: {e.code} - {e.reason}")
+              # Try fallback: scrape a public source
+              print("Falling back to manual results file")
+          except Exception as e:
+              print(f"⚠️ Error: {e}")
+              print("Results file unchanged")
+          EOF
+
+          python3 fetch_results.py
+
+      - name: Commit updated results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/results.json
+          git diff --cached --quiet || git commit -m "🤖 Auto-update match results $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          git push
