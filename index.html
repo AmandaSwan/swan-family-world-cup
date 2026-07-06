@@ -1072,7 +1072,6 @@ function renderDraft(){
       <div class="panel hero-draft">
         <div class="die">🎲</div>
         <div class="title display" style="font-size:20px; -webkit-text-fill-color:var(--ink); background:none;">8 players. 16 teams.<br>One roll.</div>
-        <button class="roll-btn" data-action="roll">Roll the Dice</button>
         <div class="roll-hint">Each player gets one top-seed team + one bottom-seed team.<br>No one can end up with two teams that face each other in the Round of 16.</div>
       </div>
       <div class="panel">
@@ -1100,7 +1099,7 @@ function renderDraft(){
       </div>
     `;
   }).join("");
-  return `${cards}<button class="reroll-btn" data-action="reset">Reset &amp; Reroll</button>`;
+  return `${cards}`;
 }
 
 /* ---- SCHEDULE TAB ---- */
