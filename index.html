@@ -1199,24 +1199,6 @@ function renderLeaderboard(){
   const {pts, gd} = computePoints();
   const ranked = [...state.assignments].sort((a,b)=> pts[b.player]-pts[a.player] || gd[b.player]-gd[a.player]);
 
-  let podium = "";
-  if(ranked.length>=3){
-    const order = [1,0,2]; // silver, gold, bronze visual order
-    const heights = {0:64,1:82,2:50};
-    const medal = {0:"🥇",1:"🥈",2:"🥉"};
-    podium = `<div class="podium">` + order.map(i=>{
-      const a = ranked[i]; const color = PLAYER_COLORS[a.player];
-      return `<div class="podium-slot">
-        <div class="podium-avatar" style="background:${color}">${a.player[0]}</div>
-        <div class="podium-bar" style="height:${heights[i]}px; background:linear-gradient(180deg, ${color}55, ${color}22); border:1px solid ${color}66;">
-          <div style="font-size:20px;">${medal[i]}</div>
-        </div>
-        <div class="podium-name">${a.player}</div>
-        <div class="podium-pts">${pts[a.player]} pts</div>
-      </div>`;
-    }).join("") + `</div>`;
-  }
-
   const rows = ranked.map((a,i)=>{
     const top = getTeam(a.top), bot = getTeam(a.bottom), color = PLAYER_COLORS[a.player];
     const gdVal = gd[a.player];
@@ -1232,7 +1214,7 @@ function renderLeaderboard(){
     </div>`;
   }).join("");
 
-  return podium + rows + `<div style="text-align:center; font-size:11px; color:#999; margin-top:16px; padding:0 12px;">3 pts per win · Tiebreaker: goal differential across all your teams' matches</div>`;
+  return rows + `<div style="text-align:center; font-size:11px; color:#999; margin-top:16px; padding:0 12px;">3 pts per win · Tiebreaker: goal differential across all your teams' matches</div>`;
 }
 
 /* ============ EVENTS ============ */
