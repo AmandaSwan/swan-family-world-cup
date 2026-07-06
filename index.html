@@ -419,24 +419,12 @@ const ROUND_COLOR = {"Round of 16":"var(--green)","Quarterfinal":"var(--blue)","
 /* ============ STATE ============ */
 let state = { tab:"draft", assignments:null, results:{}, r32Winners:{}, loaded:false, rolling:false };
 
-/* ============ STORAGE (GitHub Gist — CORS enabled, never expires) ============ */
-const GIST_ID = 'c071b4cbc2bab1314ecdc9d7474edcee';
-const GIST_API = `https://api.github.com/gists/${GIST_ID}`;
+/* ============ STORAGE (Firebase Realtime Database — no tokens needed) ============ */
+const FIREBASE_DB_URL = 'https://wc-pool-1502d-default-rtdb.firebaseio.com';
+const DB_PATH = '/pool-state.json';
 const LOCAL_KEY = 'swan-wc26-pool';
-const TOKEN_KEY = 'swan-wc-gist-token';
-let GIST_TOKEN = localStorage.getItem(TOKEN_KEY) || '';
 let lastSyncTime = null;
 let syncStatus = 'idle'; // idle | syncing | success | error
-
-function promptForToken() {
-  const tok = prompt('Paste the write key (ask Amanda):');
-  if (tok && tok.trim()) {
-    GIST_TOKEN = tok.trim();
-    localStorage.setItem(TOKEN_KEY, GIST_TOKEN);
-    return true;
-  }
-  return false;
-}
 
 function showToast(msg, type='info') {
   let t = document.getElementById('sync-toast');
@@ -471,22 +459,20 @@ async function loadAll(){
   const hadAssignments = !!state.assignments;
   const prevResults = JSON.stringify(state.results || {});
   try {
-    // Public gist — no auth needed for reads
-    const resp = await fetch(GIST_API, { cache: 'no-store' });
+    const resp = await fetch(FIREBASE_DB_URL + DB_PATH, { cache: 'no-store' });
     if (resp.ok) {
-      const gist = await resp.json();
-      const content = gist.files['pool-state.json'].content;
-      const data = JSON.parse(content);
-      state.assignments = data.assignments || null;
-      state.results = data.results || {};
-      state.r32Winners = data.r32Winners || {};
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(data));
+      const data = await resp.json();
+      if (data) {
+        state.assignments = data.assignments || null;
+        state.results = data.results || {};
+        state.r32Winners = data.r32Winners || {};
+      }
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(data || {}));
       lastSyncTime = new Date();
       syncStatus = 'success';
 
       // Detect new data and alert the viewer
       if (!hadAssignments && state.assignments) {
-        // Teams were just assigned by someone else!
         showToast('🎲 Teams have been assigned! Check the Draft tab', 'success');
         if (notificationsEnabled && navigator.serviceWorker && navigator.serviceWorker.ready) {
           navigator.serviceWorker.ready.then(reg => {
@@ -504,7 +490,7 @@ async function loadAll(){
       if (prevResults !== JSON.stringify(state.results) && hadAssignments) {
         showToast('⚽ Scores updated!', 'info');
       }
-    } else { throw new Error('Gist fetch failed: ' + resp.status); }
+    } else { throw new Error('Firebase fetch failed: ' + resp.status); }
   } catch(e) {
     console.warn('Cloud load failed, using local cache', e);
     syncStatus = 'error';
@@ -525,26 +511,14 @@ async function loadAll(){
 async function saveAll(silent) {
   const data = { assignments: state.assignments, results: state.results, r32Winners: state.r32Winners };
   localStorage.setItem(LOCAL_KEY, JSON.stringify(data));
-  // No token = read-only viewer, just save locally
-  if (!GIST_TOKEN) { if (!silent) showToast('👀 View-only mode', 'info'); return; }
   syncStatus = 'syncing'; updateSyncBadge();
   try {
-    const resp = await fetch(GIST_API, {
-      method: 'PATCH',
-      headers: {
-        'Authorization': `token ${GIST_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        files: { 'pool-state.json': { content: JSON.stringify(data) } }
-      }),
+    const resp = await fetch(FIREBASE_DB_URL + DB_PATH, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
     });
-    if (resp.status === 401 || resp.status === 403) {
-      localStorage.removeItem(TOKEN_KEY); GIST_TOKEN = '';
-      showToast('⚠ Write key expired — ask Amanda for new one', 'error');
-      syncStatus = 'error'; updateSyncBadge(); return;
-    }
-    if (!resp.ok) throw new Error('Gist save failed: ' + resp.status);
+    if (!resp.ok) throw new Error('Firebase save failed: ' + resp.status);
     lastSyncTime = new Date();
     syncStatus = 'success';
     if (!silent) showToast('✓ Saved & synced for everyone', 'success');
@@ -564,9 +538,9 @@ async function forceSync() {
   else showToast('⚠ Could not reach server', 'error');
 }
 
-async function saveAssignments(){ if(!GIST_TOKEN && !promptForToken()) return; await saveAll(); }
-async function saveResults(){ if(!GIST_TOKEN && !promptForToken()) return; await saveAll(); }
-async function saveR32(){ if(!GIST_TOKEN && !promptForToken()) return; await saveAll(); }
+async function saveAssignments(){ await saveAll(); }
+async function saveResults(){ await saveAll(); }
+async function saveR32(){ await saveAll(); }
 
 /* ============ LIVE SCORES (football-data.org) ============ */
 const FD_API_KEY = '5bd65f111c1f409cb7e7e0edfc4e5b08';
@@ -1228,15 +1202,6 @@ function attachHandlers(){
 
 /* ============ INIT ============ */
 (async function init(){
-  // Auto-save write key from URL param (e.g. ?key=github_pat_...)
-  const urlParams = new URLSearchParams(window.location.search);
-  const urlKey = urlParams.get('key');
-  if (urlKey) {
-    GIST_TOKEN = urlKey;
-    localStorage.setItem(TOKEN_KEY, urlKey);
-    // Strip key from URL so it's not visible/shared
-    window.history.replaceState({}, '', window.location.pathname);
-  }
   document.getElementById("app").innerHTML = `<div class="empty-note" style="padding-top:80px;">Loading pool…</div>`;
   await loadAll();
   render();
