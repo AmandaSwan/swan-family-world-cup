@@ -718,8 +718,14 @@ async function enableFromBanner() {
 
 function getOwnerOfTeam(tla) {
   if (!state.assignments) return null;
+  // If tla is a pending slot (e.g. ARGCPV), resolve to the actual team
+  let resolvedTla = tla;
+  if (PENDING[tla] && state.r32Winners[tla]) resolvedTla = state.r32Winners[tla];
   for (const a of state.assignments) {
-    if (a.top === tla || a.bottom === tla) return a.player;
+    if (a.top === resolvedTla || a.bottom === resolvedTla) return a.player;
+    // Also check if their slot matches a pending that resolved to tla
+    if (PENDING[a.top] && state.r32Winners[a.top] === tla) return a.player;
+    if (PENDING[a.bottom] && state.r32Winners[a.bottom] === tla) return a.player;
   }
   return null;
 }
