@@ -551,20 +551,30 @@ async function saveAll(silent) {
   const data = { assignments: state.assignments, results: state.results, r32Winners: state.r32Winners };
   localStorage.setItem(LOCAL_KEY, JSON.stringify(data));
   syncStatus = 'syncing'; updateSyncBadge();
-  try {
-    const resp = await fetch(FIREBASE_DB_URL + DB_PATH, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!resp.ok) throw new Error('Firebase save failed: ' + resp.status);
-    lastSyncTime = new Date();
-    syncStatus = 'success';
-    if (!silent) showToast('✓ Saved & synced for everyone', 'success');
-  } catch(e) {
-    console.error('Sync failed', e);
-    syncStatus = 'error';
-    if (!silent) showToast('⚠ Save failed — check connection', 'error');
+  let attempts = 0;
+  while (attempts < 3) {
+    try {
+      const resp = await fetch(FIREBASE_DB_URL + DB_PATH, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!resp.ok) throw new Error('Firebase save failed: ' + resp.status);
+      lastSyncTime = new Date();
+      syncStatus = 'success';
+      if (!silent) showToast('✓ Saved & synced for everyone', 'success');
+      updateSyncBadge();
+      return;
+    } catch(e) {
+      attempts++;
+      if (attempts < 3) {
+        await new Promise(r => setTimeout(r, 2000 * attempts));
+      } else {
+        console.error('Sync failed after 3 attempts', e);
+        syncStatus = 'error';
+        if (!silent) showToast('⚠ Save failed — check connection', 'error');
+      }
+    }
   }
   updateSyncBadge();
 }
@@ -912,12 +922,15 @@ async function fetchLiveScores() {
     }
 
     if (changed) {
+      console.log('📝 New results detected, saving...');
       await saveAll(true);
       render();
     }
-    console.log('✅ Live scores checked');
+    console.log('✅ Live scores checked, results:', Object.keys(state.results).length);
   } catch(e) {
-    console.log('Live score fetch skipped:', e.message);
+    console.log('Live score fetch error:', e.message);
+    // Retry once after 10s on failure
+    setTimeout(() => fetchLiveScores(), 10000);
   }
 }
 
