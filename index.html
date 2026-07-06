@@ -977,8 +977,8 @@ async function resetDraft(){
 
 /* ============ POINTS ============ */
 function computePoints(){
-  const pts = {}; PLAYERS.forEach(p=>pts[p]=0);
-  if(!state.assignments) return pts;
+  const pts = {}; const gd = {}; PLAYERS.forEach(p=>{pts[p]=0; gd[p]=0;});
+  if(!state.assignments) return {pts, gd};
   for(const g of GAMES){
     const res = state.results[g.id];
     if(!res || !res.winner) continue;
@@ -987,8 +987,16 @@ function computePoints(){
     for(const a of state.assignments){
       if(a.top===winnerSlot || a.bottom===winnerSlot) pts[a.player]+=3;
     }
+    // Goal differential
+    if(res.homeScore!=null && res.awayScore!=null){
+      const homeSlot = resolveSlot(g.home), awaySlot = resolveSlot(g.away);
+      for(const a of state.assignments){
+        if(a.top===homeSlot || a.bottom===homeSlot) gd[a.player] += (res.homeScore - res.awayScore);
+        if(a.top===awaySlot || a.bottom===awaySlot) gd[a.player] += (res.awayScore - res.homeScore);
+      }
+    }
   }
-  return pts;
+  return {pts, gd};
 }
 
 /* ============ RESULT ENTRY ============ */
@@ -1188,8 +1196,8 @@ function renderLeaderboard(){
   if(!state.assignments){
     return `<div class="empty-note">🎲 Roll the dice on the Draft tab first — the leaderboard fills in once teams are assigned.</div>`;
   }
-  const pts = computePoints();
-  const ranked = [...state.assignments].sort((a,b)=> pts[b.player]-pts[a.player]);
+  const {pts, gd} = computePoints();
+  const ranked = [...state.assignments].sort((a,b)=> pts[b.player]-pts[a.player] || gd[b.player]-gd[a.player]);
 
   let podium = "";
   if(ranked.length>=3){
@@ -1211,6 +1219,8 @@ function renderLeaderboard(){
 
   const rows = ranked.map((a,i)=>{
     const top = getTeam(a.top), bot = getTeam(a.bottom), color = PLAYER_COLORS[a.player];
+    const gdVal = gd[a.player];
+    const gdStr = gdVal > 0 ? `+${gdVal}` : `${gdVal}`;
     return `<div class="lb-row">
       <div class="lb-rank">${i+1}</div>
       <div class="lb-avatar" style="background:${color}">${a.player[0]}</div>
@@ -1218,11 +1228,11 @@ function renderLeaderboard(){
         <div class="lb-name">${a.player}</div>
         <div class="lb-teams"><span>${top.flag} ${top.name}</span><span>${bot.flag} ${bot.name}</span></div>
       </div>
-      <div class="lb-pts">${pts[a.player]}</div>
+      <div class="lb-pts">${pts[a.player]}<span style="font-size:10px;color:#888;display:block;">${gdStr} GD</span></div>
     </div>`;
   }).join("");
 
-  return podium + rows;
+  return podium + rows + `<div style="text-align:center; font-size:11px; color:#999; margin-top:16px; padding:0 12px;">3 pts per win · Tiebreaker: goal differential across all your teams' matches</div>`;
 }
 
 /* ============ EVENTS ============ */
