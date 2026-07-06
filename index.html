@@ -545,6 +545,8 @@ async function loadAll(){
 }
 
 async function saveAll(silent) {
+  // Never overwrite cloud data before we've loaded it
+  if (!state.loaded) return;
   const data = { assignments: state.assignments, results: state.results, r32Winners: state.r32Winners };
   localStorage.setItem(LOCAL_KEY, JSON.stringify(data));
   syncStatus = 'syncing'; updateSyncBadge();
