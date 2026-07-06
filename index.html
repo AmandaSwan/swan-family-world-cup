@@ -1148,14 +1148,17 @@ function renderMatchCard(g){
   const winner = res.winner;
   const tied = res.homeScore!=null && res.awayScore!=null && res.homeScore===res.awayScore && !winner;
 
+  const homeOwner = homeKnown ? getOwnerOfTeam(homeSlot) : null;
+  const awayOwner = awayKnown ? getOwnerOfTeam(awaySlot) : null;
+
   const homeRow = `
     <div class="team-row ${winner==='home'?'winner':''} ${winner==='away'?'loser':''}" ${canPlay?`data-action="setwin" data-gid="${g.id}" data-side="home"`:""}>
-      <div class="tname"><span class="flag">${home.flag}</span>${home.name}${winner==='home'?' <span class="win-mark">✅</span>':''}</div>
+      <div class="tname"><span class="flag">${home.flag}</span>${home.name}${homeOwner?` <span style="font-size:11px;color:${PLAYER_COLORS[homeOwner]||'#888'};font-weight:600;">(${homeOwner})</span>`:''}${winner==='home'?' <span class="win-mark">✅</span>':''}</div>
       ${canPlay?`<input id="h_${g.id}" class="score-in" type="number" min="0" value="${res.homeScore!=null?res.homeScore:''}" placeholder="-" onclick="event.stopPropagation()">`:""}
     </div>`;
   const awayRow = `
     <div class="team-row ${winner==='away'?'winner':''} ${winner==='home'?'loser':''}" ${canPlay?`data-action="setwin" data-gid="${g.id}" data-side="away"`:""}>
-      <div class="tname"><span class="flag">${away.flag}</span>${away.name}${winner==='away'?' <span class="win-mark">✅</span>':''}</div>
+      <div class="tname"><span class="flag">${away.flag}</span>${away.name}${awayOwner?` <span style="font-size:11px;color:${PLAYER_COLORS[awayOwner]||'#888'};font-weight:600;">(${awayOwner})</span>`:''}${winner==='away'?' <span class="win-mark">✅</span>':''}</div>
       ${canPlay?`<input id="a_${g.id}" class="score-in" type="number" min="0" value="${res.awayScore!=null?res.awayScore:''}" placeholder="-" onclick="event.stopPropagation()">`:""}
     </div>`;
 
