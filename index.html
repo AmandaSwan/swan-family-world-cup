@@ -832,6 +832,26 @@ function checkScoreChanges(gameId, match) {
 
 async function fetchLiveScores() {
   try {
+    // Coordination: check if another client already fetched recently
+    const metaResp = await fetch(FIREBASE_DB_URL + '/pool-state/lastApiFetch.json');
+    const lastApiFetch = metaResp.ok ? await metaResp.json() : 0;
+    const now = Date.now();
+    const FETCH_COOLDOWN = 90 * 1000; // 90 seconds between API hits
+
+    if (lastApiFetch && (now - lastApiFetch) < FETCH_COOLDOWN) {
+      // Another client fetched recently — just reload from Firebase
+      console.log('⏭ Skipping API fetch (another client fetched ' + Math.round((now - lastApiFetch)/1000) + 's ago)');
+      await loadAll();
+      render();
+      return;
+    }
+
+    // Claim the fetch slot
+    await fetch(FIREBASE_DB_URL + '/pool-state/lastApiFetch.json', {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(now)
+    });
+
     // First, fetch R32 results to resolve pending slots
     const r32Resp = await fetch(
       `${FD_BASE}?stage=LAST_32&status=FINISHED,IN_PLAY,PAUSED`,
@@ -854,7 +874,6 @@ async function fetchLiveScores() {
         const key = hTla + '_' + aTla;
         const slot = R32_SLOT_MAP[key];
         if (!slot || state.r32Winners[slot]) continue;
-        // Determine winner
         if (match.score.winner === 'HOME_TEAM') {
           state.r32Winners[slot] = hTla; changed = true;
         } else if (match.score.winner === 'AWAY_TEAM') {
