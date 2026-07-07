@@ -1001,17 +1001,26 @@ async function resetDraft(){
 function computePoints(){
   const pts = {}; const gd = {}; PLAYERS.forEach(p=>{pts[p]=0; gd[p]=0;});
   if(!state.assignments) return {pts, gd};
+
+  // Helper: resolve a slot TLA to actual team (handles pending slots)
+  function resolveTeam(slot) {
+    if (!slot) return slot;
+    if (PENDING[slot] && state.r32Winners[slot]) return state.r32Winners[slot];
+    return slot;
+  }
+
   for(const g of GAMES){
     const res = state.results[g.id];
     if(!res || !res.winner) continue;
-    const winnerSlot = resolveSlot(g[res.winner]);
+    const winnerSlot = resolveTeam(resolveSlot(g[res.winner]));
     if(!winnerSlot) continue;
     for(const a of state.assignments){
       if(a.top===winnerSlot || a.bottom===winnerSlot) pts[a.player]+=3;
     }
     // Goal differential
     if(res.homeScore!=null && res.awayScore!=null){
-      const homeSlot = resolveSlot(g.home), awaySlot = resolveSlot(g.away);
+      const homeSlot = resolveTeam(resolveSlot(g.home));
+      const awaySlot = resolveTeam(resolveSlot(g.away));
       for(const a of state.assignments){
         if(a.top===homeSlot || a.bottom===homeSlot) gd[a.player] += (res.homeScore - res.awayScore);
         if(a.top===awaySlot || a.bottom===awaySlot) gd[a.player] += (res.awayScore - res.homeScore);
